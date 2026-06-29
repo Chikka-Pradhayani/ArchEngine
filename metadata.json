@@ -1,0 +1,8 @@
+{
+  "name": "AI Software Project Architect & Feasibility Engine",
+  "description": "Evaluate software projects for feasibility, cost, stack, architecture, and success probability using AI-guided Solution Architect tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
