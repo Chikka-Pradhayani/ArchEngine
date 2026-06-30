@@ -8,6 +8,7 @@ import { RoadmapViewer } from "./components/RoadmapViewer";
 import { DocumentDownloader } from "./components/DocumentDownloader";
 import { CostChart } from "./components/CostChart";
 import { DeploymentAdvisorComp } from "./components/DeploymentAdvisorComp";
+import { GoogleGenAI } from "@google/genai";
 
 import {
   Sun,
@@ -36,6 +37,214 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+const SYSTEM_INSTRUCTION = `You are a highly experienced CTO, Solution Architect, Technical Lead, and Software Project Mentor. 
+Your goal is to evaluate software project proposals for feasibility, success probability, costs, technical risks, and architecture.
+You must be extremely realistic, rigorous, and objective. Never sugarcoat findings. If a project is unrealistic given its timeline, budget, or team skills, explain exactly why and suggest a realistic MVP in the realityCheck module.
+
+You must return a single, valid, raw JSON object that maps perfectly to the following typescript interface:
+interface MetricAnalysis {
+  score: number; // 0-100
+  details: string;
+}
+interface StackDetail {
+  name: string;
+  justification: string;
+}
+interface RecommendedStack {
+  frontend: StackDetail;
+  backend: StackDetail;
+  database: StackDetail;
+  auth: StackDetail;
+  cloud: StackDetail;
+  ai: StackDetail;
+  monitoring: StackDetail;
+}
+interface AlternativeStack {
+  cost: string;
+  pros: string[];
+  cons: string[];
+  components: string[];
+}
+interface AlternativeStacks {
+  studentFreeTier: AlternativeStack;
+  budgetFriendly: AlternativeStack;
+  productionReady: AlternativeStack;
+  enterprise: AlternativeStack;
+}
+interface CostEstimation {
+  development: number; // estimated development labor value in USD if hired out, or 0 if team-internal
+  hosting: number; // monthly hosting in USD
+  domain: number; // annual domain cost in USD
+  database: number; // monthly database cost in USD
+  storage: number; // monthly storage cost in USD
+  aiApi: number; // monthly AI API cost in USD
+  monitoring: number; // monthly monitoring cost in USD
+  monthlyTotal: number;
+  annualTotal: number;
+}
+interface DeploymentPlatform {
+  platform: string;
+  link: string;
+  pricing: string;
+  advantages: string[];
+  limitations: string[];
+}
+interface DeploymentAdvisor {
+  frontend: DeploymentPlatform[];
+  backend: DeploymentPlatform[];
+  database: DeploymentPlatform[];
+  cloud: DeploymentPlatform[];
+}
+interface ArchComponent {
+  id: string; // e.g. "ui", "api", "db", "auth", "gemini", "storage"
+  name: string;
+  type: 'client' | 'server' | 'database' | 'auth' | 'ai' | 'external';
+  description: string;
+  x: number; // Coordinate for visual plotting, standard bounds 100 to 700
+  y: number; // Coordinate for visual plotting, standard bounds 100 to 500
+}
+interface ArchConnection {
+  from: string; // matches id of component
+  to: string; // matches id of component
+  label: string; // description of flow
+}
+interface DbTableColumn {
+  name: string;
+  type: string;
+  constraints: string;
+}
+interface DbTable {
+  name: string;
+  columns: DbTableColumn[];
+}
+interface ApiEndpoint {
+  method: string;
+  path: string;
+  desc: string;
+  payload: string;
+  response: string;
+}
+interface ArchitectureData {
+  systemArchitectureDesc: string;
+  components: ArchComponent[];
+  connections: ArchConnection[];
+  databaseSchemaDesc: string;
+  dbTables: DbTable[];
+  apiFlowDesc: string;
+  apiEndpoints: ApiEndpoint[];
+  deploymentArchitectureDesc: string;
+}
+interface RoadmapTask {
+  category: string;
+  task: string;
+  duration: string;
+}
+interface RoadmapWeek {
+  week: number;
+  title: string;
+  tasks: RoadmapTask[];
+}
+interface MaintenancePrediction {
+  monthlyHours: number;
+  bugFixingEffort: string;
+  scalingRequirements: string;
+  databaseGrowth: string;
+  infrastructureUpgrades: string;
+}
+interface RiskItem {
+  category: 'Technical' | 'Financial' | 'Security' | 'Scalability' | 'Timeline';
+  risk: string;
+  severity: 'Low' | 'Medium' | 'High';
+  mitigation: string;
+}
+interface RealityCheck {
+  isRealistic: boolean;
+  verdict: string;
+  mvpSuggestion: string; // Concrete suggestion on what they should actually build if their proposal is unrealistic, or how to phase it.
+}
+interface SimilarProject {
+  type: 'GitHub Repository' | 'Existing Product' | 'Competitor' | 'Alternative Approach';
+  name: string;
+  url: string;
+  description: string;
+}
+interface Documents {
+  readme: string; // Full markdown content for README.md with clear structure, setup, and features
+  proposal: string; // Full markdown content for Project Proposal
+  srs: string; // Full markdown content for Software Requirements Specification (SRS)
+  pptStructure: string; // Full markdown content detailing a slide-by-slide presentation outline
+  capstoneStructure: string; // Full markdown content detailing a capstone/thesis report structure
+}
+interface LearningRoadmapTopic {
+  topic: string;
+  resource: string;
+  duration: string;
+}
+interface AnalysisResponse {
+  feasibilityScore: number; // 0-100 overall
+  feasibilityExplanation: string;
+  complexityAnalysis: MetricAnalysis;
+  budgetAnalysis: MetricAnalysis;
+  timelineAnalysis: MetricAnalysis;
+  teamCapabilityAnalysis: MetricAnalysis;
+  successProbability: number; // 0-100
+  successExplanation: string;
+  strengths: string[];
+  weaknesses: string[];
+  bottlenecks: string[];
+  innovationScore: number; // 0-100
+  innovationDetails: string;
+  saturationLevel: 'Low' | 'Medium' | 'High';
+  suggestionsForUniqueness: string[];
+  competitorComparison: string;
+  recommendedTeamSize: number;
+  requiredRoles: string[];
+  missingSkillsRoadmap: string[];
+  suggestedLearningRoadmap: LearningRoadmapTopic[];
+  recommendedStack: RecommendedStack;
+  alternativeStacks: AlternativeStacks;
+  costEstimation: CostEstimation;
+  deploymentAdvisor: DeploymentAdvisor;
+  architecture: ArchitectureData;
+  developmentRoadmap: RoadmapWeek[];
+  maintenancePrediction: MaintenancePrediction;
+  riskAnalysis: RiskItem[];
+  realityCheck: RealityCheck;
+  similarProjects: SimilarProject[];
+  documentation: Documents;
+}
+
+Guidelines for generating fields:
+1. Architectural diagram components should have unique coordinates (x and y) between 100-700 and 100-500 so they look tidy when rendered. Standard components should represent client apps, server gateways, databases, cloud bucket storage, auth microservices, and AI APIs.
+2. Deployment Advisor: Include real services like Vercel, Netlify, Railway, Render, Fly.io, Supabase, Neon, MongoDB Atlas, AWS, Azure, Google Cloud with exact pricing notes and valid links (e.g. "https://vercel.com", "https://railway.app", etc.).
+3. Database schema: design 3-5 key relational database tables that represent the core features of the app, complete with realistic column types and foreign key constraint labels.
+4. Roadmaps: Produce a week-by-week timeline based on the project's deadline and constraints. If the user's deadline is 30 days, generate a 4-week roadmap. If it's 90 days, generate a 12-week or 6-biweekly phase roadmap.
+5. README, SRS, and Proposal markdown: Provide detailed, highly comprehensive, fully formatted markdown texts in the documentation field. Avoid brief summaries. The user wants to copy these texts to jumpstart their project.
+6. Return ONLY a valid JSON object. No pre-text or post-text.`;
+
+const buildUserPrompt = (inputs: ProjectInputs) => `
+Analyze the following project proposal details and return a complete feasibility report and project blueprint in the requested JSON structure.
+
+--- PROJECT DETAILS ---
+Title: ${inputs.title}
+Description: ${inputs.description}
+Category: ${inputs.category}
+Target Users: ${inputs.targetUsers}
+Expected Number of Users: ${inputs.expectedUsers}
+
+--- TEAM DETAILS ---
+Team Size: ${inputs.teamSize}
+Skill Level: ${inputs.skillLevel}
+Available Technologies: ${inputs.availableTech}
+Missing Skills: ${inputs.missingSkills}
+
+--- CONSTRAINTS ---
+Budget: $${inputs.budget}
+Deadline: ${inputs.deadline} days
+Weekly Available Hours: ${inputs.weeklyHours} hours
+Project Type: ${inputs.projectType}
+`;
+
 export default function App() {
   const [inputs, setInputs] = useState<ProjectInputs | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
@@ -43,6 +252,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true); // Default to a gorgeous Dark Mode
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+
+  // Client Side Direct Mode Configuration
+  const [clientApiKey, setClientApiKey] = useState<string>(() => localStorage.getItem("arch_engine_api_key") || "");
+  const [useClientSide, setUseClientSide] = useState<boolean>(() => localStorage.getItem("arch_engine_use_client_side") === "true");
 
   // Manage dark mode classes on body
   useEffect(() => {
@@ -53,26 +266,90 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  const evaluateProjectClientSide = async (inputs: ProjectInputs, apiKey: string): Promise<AnalysisResponse> => {
+    const ai = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build-client",
+        },
+      },
+    });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: buildUserPrompt(inputs),
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Empty response received from direct Gemini API call.");
+    }
+
+    try {
+      return JSON.parse(responseText.trim());
+    } catch (err) {
+      // Attempt markdown block clean-up
+      const cleaned = responseText
+        .replace(/^```json\s*/i, "")
+        .replace(/```\s*$/, "")
+        .trim();
+      return JSON.parse(cleaned);
+    }
+  };
+
   const handleEvaluateProject = async (formData: ProjectInputs) => {
     setLoading(true);
     setError(null);
     setInputs(formData);
 
     try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+      let result: AnalysisResponse;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze the project. Please check backend logs.");
+      if (useClientSide && clientApiKey) {
+        result = await evaluateProjectClientSide(formData, clientApiKey);
+      } else {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        });
+
+        let responseText = "";
+        try {
+          responseText = await response.text();
+        } catch (readErr) {
+          throw new Error("Unable to read the response from the server.");
+        }
+
+        if (!response.ok) {
+          let backendError = "Server responded with an error.";
+          try {
+            const parsedError = JSON.parse(responseText);
+            backendError = parsedError.error || backendError;
+          } catch (e) {
+            backendError = responseText.substring(0, 300) || `HTTP status ${response.status}`;
+          }
+          throw new Error(`[Backend Response] ${backendError}`);
+        }
+
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseErr) {
+          console.error("Parse error. Raw response text was:", responseText);
+          throw new Error(
+            `The server returned a non-JSON response (likely an HTML error page from a static hosting provider or misconfigured proxy router). This typically happens when the Express server is not running or is deployed as client-side only.\n\nResponse Preview:\n"${responseText.substring(0, 120)}..."`
+          );
+        }
       }
 
-      const result: AnalysisResponse = await response.json();
       setAnalysisResult(result);
       setActiveTab("dashboard");
     } catch (err: any) {
@@ -137,17 +414,44 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {error && (
-          <div className="mb-6 p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-300 text-xs flex gap-3 items-start">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-rose-500" />
-            <div>
-              <h4 className="font-bold mb-1">Architecture Analysis Failure</h4>
-              <p className="leading-relaxed">{error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="mt-2 text-[11px] font-bold underline hover:text-rose-600 cursor-pointer"
-              >
-                Dismiss
-              </button>
+          <div className="mb-6 p-5 rounded-2xl border border-rose-200 dark:border-rose-950 bg-rose-50/50 dark:bg-rose-950/10 text-rose-800 dark:text-rose-300 text-xs flex gap-4 items-start">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-rose-500 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-bold mb-1 text-sm text-rose-900 dark:text-rose-200">Architecture Analysis Failure</h4>
+              <p className="leading-relaxed whitespace-pre-wrap font-mono text-[11px] bg-white/40 dark:bg-slate-950/40 p-2.5 rounded-lg border border-rose-100 dark:border-rose-950/20">{error}</p>
+              
+              {/* Intelligent Client-Side Direct Mode Fallback suggestion */}
+              {(error.includes("Unexpected token") || error.includes("non-JSON") || error.includes("proxy") || error.includes("router") || error.includes("Express")) && (
+                <div className="mt-4 p-4 bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-950 rounded-xl space-y-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-bold text-xs">
+                    <Sparkles className="w-4 h-4 animate-bounce" />
+                    💡 Deploying on GitHub Pages, Netlify, or Vercel?
+                  </div>
+                  <p className="text-slate-650 dark:text-slate-400 text-[11px] leading-relaxed font-sans">
+                    Static web hosts serve only static frontend files and do not automatically boot the full-stack Express server, which is why request path <code>/api/analyze</code> returns HTML fallback page.
+                    <br /><br />
+                    To run successfully on static hosts, you can switch to <strong>Direct Client Mode</strong>, which queries the official Google Gemini API directly from your browser!
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setUseClientSide(true);
+                        localStorage.setItem("arch_engine_use_client_side", "true");
+                        setError(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition cursor-pointer shadow-sm shadow-indigo-600/20"
+                    >
+                      Enable Direct Client Mode
+                    </button>
+                    <button
+                      onClick={() => setError(null)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-150 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition cursor-pointer"
+                    >
+                      Dismiss Error
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -204,6 +508,58 @@ export default function App() {
                     <span>Full documentation portal (.MD exports)</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Direct Client-side Configuration Widget */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Terminal className="w-4 h-4 text-indigo-500" />
+                    Direct Client Mode
+                  </span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useClientSide}
+                      onChange={(e) => {
+                        setUseClientSide(e.target.checked);
+                        localStorage.setItem("arch_engine_use_client_side", String(e.target.checked));
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 dark:bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:after:border-slate-600 peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {useClientSide ? (
+                  <div className="space-y-3">
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                      Queries the Google Gemini API directly from your browser. <strong>Recommended for GitHub Pages, Vercel, Netlify static deployments.</strong>
+                    </p>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        Google Gemini API Key
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Paste your Gemini API Key (AIzaSy...)"
+                        value={clientApiKey}
+                        onChange={(e) => {
+                          setClientApiKey(e.target.value);
+                          localStorage.setItem("arch_engine_api_key", e.target.value);
+                        }}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:border-indigo-500 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 font-mono transition-colors"
+                      />
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-normal pt-1">
+                        Get a free key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">Google AI Studio</a>. Keys are saved securely in your browser's local storage.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                    Requests are processed via the companion full-stack Express server proxy (<code>/api/analyze</code>).
+                  </p>
+                )}
               </div>
             </div>
 
